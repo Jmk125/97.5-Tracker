@@ -35,20 +35,33 @@ def add_entry():
     print(f"Added entry: {song} by {artist} at {timestamp}")
 
 def delete_entry():
-    list_entries()
-    entry_id = input("Enter the ID of the entry to delete: ")
-    
+    print("\nHere are the current entries for reference:")
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM songs WHERE id = ?', (entry_id,))
+    cursor.execute('SELECT * FROM songs ORDER BY timestamp DESC')
+    rows = cursor.fetchall()
+    conn.close()
+
+    for row in rows:
+        print(row)
+
+    entry_ids = input("\nEnter the IDs of the entries to delete (comma-separated, e.g., 234, 235, 238): ")
+    try:
+        ids = [int(id.strip()) for id in entry_ids.split(',')]
+    except ValueError:
+        print("Invalid input. Please enter valid numeric IDs separated by commas.")
+        return
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.executemany('DELETE FROM songs WHERE id = ?', [(id,) for id in ids])
     conn.commit()
     conn.close()
-    print(f"Deleted entry with id: {entry_id}")
+    print(f"\nDeleted entries with IDs: {', '.join(map(str, ids))}")
 
 def update_entry():
     list_entries()
     entry_id = input("Enter the ID of the entry to update: ")
-    
     song = input("Enter the new song name (leave blank to keep current): ")
     artist = input("Enter the new artist name (leave blank to keep current): ")
     timestamp = input("Enter the new timestamp (leave blank to keep current, format: YYYY-MM-DD HH:MM:SS): ")
@@ -63,15 +76,61 @@ def update_entry():
         cursor.execute('UPDATE songs SET timestamp = ? WHERE id = ?', (timestamp, entry_id))
     conn.commit()
     conn.close()
-    print(f"Updated entry with id: {entry_id}")
+    print(f"Updated entry with ID: {entry_id}")
 
-def list_entries(limit=25):
+def renumber_entries():
+    """
+    Renumber the entries in the database to remove gaps in the ID column.
+    """
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM songs ORDER BY timestamp DESC LIMIT ?', (limit,))
+
+    # Fetch all entries ordered by timestamp
+    cursor.execute('SELECT id, song, artist, timestamp FROM songs ORDER BY timestamp ASC')
+    rows = cursor.fetchall()
+
+    # Create a temporary table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS temp_songs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            song TEXT,
+            artist TEXT,
+            timestamp TEXT
+        )
+    ''')
+
+    # Insert the sorted rows into the temporary table
+    cursor.executemany('INSERT INTO temp_songs (song, artist, timestamp) VALUES (?, ?, ?)', 
+                       [(song, artist, timestamp) for _, song, artist, timestamp in rows])
+
+    # Drop the original table and rename the temporary table
+    cursor.execute('DROP TABLE songs')
+    cursor.execute('ALTER TABLE temp_songs RENAME TO songs')
+
+    conn.commit()
+    conn.close()
+    print("\nDatabase renumbered successfully. IDs are now sequential.")
+
+def list_entries():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    limit_input = input("How many entries do you want to list? Enter a number or 'ALL': ").strip()
+
+    if limit_input.upper() == 'ALL':
+        cursor.execute('SELECT * FROM songs ORDER BY timestamp DESC')
+    else:
+        try:
+            limit = int(limit_input)
+            cursor.execute('SELECT * FROM songs ORDER BY timestamp DESC LIMIT ?', (limit,))
+        except ValueError:
+            print("Invalid input. Please enter a number or 'ALL'.")
+            conn.close()
+            return
+
     rows = cursor.fetchall()
     conn.close()
-    print("\nLast 25 entries:")
+
+    print("\nEntries:")
     for row in rows:
         print(row)
 
@@ -83,7 +142,8 @@ def main():
         print("1. Add entry")
         print("2. Delete entry")
         print("3. Update entry")
-        print("4. Quit")
+        print("4. Renumber entries")
+        print("5. Quit")
         
         choice = input("Enter your choice: ")
         if choice == '1':
@@ -93,6 +153,8 @@ def main():
         elif choice == '3':
             update_entry()
         elif choice == '4':
+            renumber_entries()
+        elif choice == '5':
             print("Quitting program.")
             break
         else:
