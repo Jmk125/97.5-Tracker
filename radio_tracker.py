@@ -19,8 +19,8 @@ logging.basicConfig(
     ]
 )
 
-# URL of the radio station's song history page
-URL = 'https://player.listenlive.co/33421/en/songhistory'
+# URL of the new radio station's page
+URL = 'https://mytuner-radio.com/radio/wone-975-429813/'
 
 # Configure options for headless mode
 options = Options()
@@ -63,10 +63,13 @@ def get_now_playing():
         time.sleep(5)
         driver.refresh()
         wait = WebDriverWait(driver, 10)
-        song_artist_info = wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'info')))
         
-        song = song_artist_info.find_element(By.CLASS_NAME, 'title').text.strip()
-        artist = song_artist_info.find_element(By.CLASS_NAME, 'artist').text.strip()
+        # Update CSS selectors to match the new website structure
+        song_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.song-name p')))
+        artist_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.artist-name')))
+        
+        song = song_element.text.strip()
+        artist = artist_element.text.strip()
         logging.info(f"Retrieved song: {song}, artist: {artist}")
         return song, artist
     except Exception as e:
